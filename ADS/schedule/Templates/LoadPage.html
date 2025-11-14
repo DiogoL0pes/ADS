@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Carregamento de CSV com Papa Parse e Tabulator</title>
+
+  <link rel="stylesheet" type="text/css" href="../Style/styles.css">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/tabulator/5.0.5/css/tabulator.min.css" rel="stylesheet">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/tabulator/5.0.5/js/tabulator.min.js"></script>
+  <script src="https://unpkg.com/mathjs@12.0.0/lib/browser/math.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.1/moment.min.js"></script>
+  <script src="../Scripts/functions.js"></script>
+
+</head>
+<body>
+  
+  <script>
+    const storedData = localStorage.getItem('executionData');
+    console.log(storedData)
+    const parsedData = storedData ? JSON.parse(storedData) : {};
+    window.defaultHeadersArray = "Curso;Unidade de execução;Turno;Turma;Inscritos no turno;Dia da Semana;Início;Fim;Dia;Características da sala pedida para a aula;Sala da aula;Lotação;Características reais da sala".split(";");
+
+    let jsonData;
+    window.dictionary = parsedData.dictionary || {}; //TODO Adicionar os seus valores aos inputs
+    window.csvSeparator = parsedData.csvSeparator || ';';
+    window.dynamicCriterium = parsedData.dynamicCriterium || ""; //TODO Alterar para a forma de array
+    window.hourFormat = parsedData.hourFormat || "HH:mm:ss";
+    window.dateFormat = parsedData.dateFormat || "DD/MM/YYYY";
+    window.dateColumns = parsedData.dateColumns || 'Dia'
+    window.hourColumns = parsedData.hourColumns || 'Início;Fim' 
+    
+
+  </script>
+  
+    <h3>Ficheiro de Salas</h3>
+    <input type="file" id="csvClassroomFileInput" multiple>
+    <br>
+    <div style="display: none" id="after-classrooms">
+      
+      <br>
+      <h3>Ficheiro de Horário</h3>
+      
+      File Input
+      <label class="switch">
+        <input type="checkbox" id="toggleSwitch">
+        <span class="slider"></span>
+      </label>
+      URL Input
+      
+      <br><br>
+      <input type="file" id="csvScheduleFileInput" style="display: block"; multiple>
+      
+      <div id="csvScheduleUrlInput" style="display: none;">
+        <div id="urlInputs">
+          <input type="text" class="urlInput" placeholder="Enter URL">
+        </div>
+        <button id="parseButton">Submeter URL</button>
+      </div>
+
+      <br>
+      <button id="show-form-button">Alterar Configurações do Ficheiro</button>
+      
+      <form id="hidden-form" style="display: none;">
+        <h4>Estas são as definições atuais, pretende alterar alguma?</h4>
+
+        <label for="delimiter">Delimitador:</label>
+        <input type="text" id="delimiter" name="delimiter" ><br>
+
+        <label for="hformat">Formato hora:</label>
+        <input type="text" id="hformat" name="hformat"><br>
+
+        <label for="dformat">Formato data:</label>
+        <input type="text" id="dformat" name="dformat"><br>
+
+        <div id="headers">
+          <br>
+          <strong>Faça a correspondência entre os seus cabeçalhos e os nossos:</strong>
+          <br>
+          Curso: <input type="text" id="header-curso">
+          <br>
+          Unidade de execução: <input type="text" id="header-unidade">
+          <br>
+          Turno: <input type="text" id="header-turno">
+          <br>
+          Turma: <input type="text" id="header-turma">
+          <br>
+          Inscritos no turno: <input type="text" id="header-inscritos">
+          <br>
+          Dia da Semana: <input type="text" id="header-dia-semana">
+          <br>
+          Início: <input type="text" id="header-inicio">
+          <br>
+          Fim: <input type="text" id="header-fim">
+          <br>
+          Dia: <input type="text" id="header-dia">
+          <br>
+          Características da sala pedida para a aula: <input type="text" id="header-caracteristicas-pedidas">
+          <br>
+          Sala da aula: <input type="text" id="header-sala">
+          <br>
+          Lotação: <input type="text" id="header-lotacao">
+          <br>
+          Características reais da sala: <input type="text" id="header-caracteristicas-reais">
+          <br><br>
+        </div>
+
+        <label for="headerh">Cabeçalhos Horas:</label>
+        <input type="text" id="headerh" name="headerh"><br>
+
+        <label for="headerd">Cabeçalhos Datas:</label>
+        <input type="text" id="headerd" name="headerd"><br>
+        
+        <div id="criteriumInputs">
+          Dynamic Criterium:
+          <input type="text" class="criteriumInput" placeholder="Enter Criterium">
+        </div>
+
+        <input type="submit" value="Submeter">
+      </form>
+    </div>
+    <div id="csvData"></div>
+  
+  <script>
+
+    const showFormButton = document.getElementById("show-form-button");
+    const parseButton = document.getElementById("parseButton");
+    const form = document.getElementById("hidden-form");
+
+    const csvFileInput = document.getElementById("csvScheduleFileInput")
+    const csvUrlInput = document.getElementById("csvScheduleUrlInput")
+    const toggleSwitch = document.getElementById('toggleSwitch');
+
+    const csvDataDiv = document.getElementById("csvData");
+    const hiddenDiv = document.getElementById("after-classrooms")
+    const inputsHeaders = document.querySelectorAll('#headers input[type="text"]');
+
+    //settingsToValue(['delimiter', 'hformat', 'dformat', 'headerh', 'headerd'], inputsHeaders) //TODO Adicionar aqui os valores do dicionário
+    
+    settingsToValue([...['delimiter', 'hformat', 'dformat', 'headerh', 'headerd'], ...Array.from(inputsHeaders).map(input => input.id)])
+
+    toggleSwitch.addEventListener('change', function() {
+      handleSwitch(csvFileInput, csvUrlInput);
+    });
+
+    showFormButton.addEventListener("click", () => {
+      if (form.style.display === "none") {
+        form.style.display = "block";
+      } else {
+        form.style.display = "none";
+      }
+    });
+
+    document.addEventListener("input", function (event) {
+      addNewInput('urlInput', 'Enter URL', 'urlInputs');
+    });
+
+    form.addEventListener("input", function (event) {
+      addNewInput('criteriumInput', 'Enter Criterium', 'criteriumInputs');
+    });
+
+    
+    form.addEventListener("submit", function(event) {
+      event.preventDefault(); // Prevent the form from actually submitting
+
+      handleInputChange("delimiter", "csvSeparator");
+      handleInputChange("hformat", "hourFormat");
+      handleInputChange("dformat", "dateFormat");
+      handleInputChange("headerh", "hourColumns");
+      handleInputChange("headerd", "dateColumns");
+
+      const criteriumInputs = [];
+      const inputValues = document.querySelectorAll('.criteriumInput');
+      inputValues.forEach(input => {
+        if(input.value.trim() !== ""){
+          criteriumInputs.push(input.value.trim());
+        }
+      });
+
+      let i = 0;
+      inputsHeaders.forEach(input => {
+        dictionary[defaultHeadersArray[i]] = input.value;
+        i++;
+      });
+    });
+
+    document.getElementById("csvScheduleFileInput").addEventListener("change", function (e) {
+      const files = e.target.files;
+      csvDataDiv.innerHTML = ""; // Clear previous data
+
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        Papa.parse(file, {
+          delimiter: csvSeparator,
+          header: true,
+          complete: function (results) {
+            handleParsedData(results, i, e, csvDataDiv, hiddenDiv, false);
+          }
+        });
+      }
+      saveSettings()
+    });
+
+    document.getElementById("csvClassroomFileInput").addEventListener("change", function (e) {
+      const files = e.target.files;
+      csvDataDiv.innerHTML = ""; // Clear previous data
+
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        Papa.parse(file, {
+          delimiter: csvSeparator,
+          header: true,
+          complete: function (results) {
+            handleParsedData(results, i, e, csvDataDiv, hiddenDiv, true);
+          }
+        });
+      }
+      saveSettings()
+    });
+
+
+    parseButton.addEventListener("click", (e) => {
+      const urlInputs = document.querySelectorAll('.urlInput');
+      const urls = [];
+
+      urlInputs.forEach(input => {
+        if (input.value.trim() !== '') {
+          urls.push(input.value.trim());
+        }
+      });
+      if (urls.length > 0) {
+        parseURLs(urls, e,  csvDataDiv, hiddenDiv);
+      }
+    });
+  </script>
+</body>
+</html>
